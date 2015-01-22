@@ -1,18 +1,15 @@
 #ifndef _PUBLIC_H_
 #define _PUBLIC_H_
 
-struct Position
-{
-	int m_x, m_y;	//coordinate of a point 
-	Position(int x, int y) : m_x(x), m_y(y) {}
+#include <list>
 
-	//operator overload
-	Position& operator = (const Position& p)
-	{
-		m_x = p.m_x;
-		m_y = p.m_y;
-		return *this;
-	}
-};
+enum DIRECTION {EASTWARD, SOUTHWARD, WESTWARD, NORTHWARD};
+
+const double MAX_X_COORDINATE = 1000;		//maximum x coordinate of the simulated region
+const double MAX_Y_COORDINATE = 1000;		//maximum y coordinate of the simulated region
+
+
+extern std::map<int, std::list<MobilityModel> > g_laneMapping;
+extern std::queue<Ptr<Vehicle> > g_vehiclePool;
 
 #endif

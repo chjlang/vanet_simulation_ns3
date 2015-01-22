@@ -7,31 +7,63 @@
 
 using namespace ns3;
 
-class Intersection
+/***********phisical layout************
+				|  |  |
+				| 3|  |
+		  ______|  |  |______
+          ______       ___2__
+          ___4__       ______
+                |  |  |
+                |  | 1|
+                |  |  |
+**************************************/
+ 
+class Intersection : public Application
 {
 public:
-	Intersection(Position center, int eastArmLength, int southArmLength, int westArmLength, int northArmLength,
-			double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate);
+	Intersection() {}
 	~Intersection() {}
+	
+	//setup intersection: ID, position, flow rates
+	void Configure(int ID, const Vector& centerPosition, 
+			double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate);
 
 	//gernerate traffic for the whole intersection
-	void generateTraffic();	
+	void GenerateTraffic();	
+
+	int GetID() { return m_ID; }
+	int GetLaneID(DIRECTION direction);
+	const Vector GetPosition() { return m_mobility->GetPosition() };
+
+	//get position of the last obstacle in lane of which the ID is laneID
+	const Vector GetObstaclePosition(int laneID);
+
+	static double size = 15;		//the size of intersection region is set to: 15m * 15m
+	static double armLength = 75;	//all arms are to 75 meters long
 
 private:
 
 	//generate traffic for a specific lane which is implied by laneNumber
-	void generateTrafficForLane(int laneNumber);
+	void GenerateTrafficForLane(DIRECTION direction);
 
 	//setup flow rate for each arm
-	void setupFlowRate(double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate);		
+	void SetupFlowRate(double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate);		
+
+	//id of the intersection and its inflow lanes
+	int m_ID;
+	int m_eastWardLaneID;
+	int m_southWardLaneID;
+	int m_westWardLaneID;
+	int m_nortWardhLaneID;
+
+	//lists which are used to manage vehicles in each lane
+	std::queue<Ptr<Vehicle> > m_eastWardLaneQueue;
+	std::queue<Ptr<Vehicle> > m_southWardLaneQueue;
+	std::queue<Ptr<Vehicle> > m_westWardLaneQueue;
+	std::queue<Ptr<Vehicle> > m_northWardLaneQueue;
 
 	//phisical configuratoin of intersection
-	Position m_centerPosition;
-
-	int m_eastArmLength;
-	int m_southArmLength;
-	int m_westArmLength;
-	int m_northArmLength;	
+	Ptr<ConstantPositionMobilityModel> m_mobility; //mobility model
 
 	//traffic flow configuration of intersection
 	double m_e2wFlowRate;		//flow rate of east to west direction;
@@ -43,6 +75,8 @@ private:
 	Ptr<ExponentialRandomVariable> m_intervalsOfw2eVehicle;
 	Ptr<ExponentialRandomVariable> m_intervalsOfs2nVehicle;
 	Ptr<ExponentialRandomVariable> m_intervalsOfn2sVehicle;
+
+
 };
 
 #endif

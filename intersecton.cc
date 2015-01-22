@@ -1,26 +1,37 @@
 #include "intersection.h"
+#include "vehicle.h"
+#include "public.h"
 
-Intersection::Intersection(Position center, int eastArmLength, int southArmLength, int westArmLength, int northArmLength
+void Intersection::Configure(int ID, const Vector& centerPosition
                     double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate)
 {
-    m_centerPosition = center;
+    //setup IDs of intersection and inflow lanes
+    m_ID = ID;
+    m_eastWardLaneID = m_ID * 10 + 4;
+    m_southWardLaneID = m_ID * 10 + 3;
+    m_westWardLaneID = m_ID * 10 + 2;
+    m_northWardLaneID = m_ID * 10 + 1;
 
-    m_eastArmLength = eastArmLength;
-    m_southArmLength = southArmLength;
-    m_westArmLength = westArmLength;
-    m_northArmLength = northArmLength;
+    //setup center position of intersection
+    m_mobility = GetNode()->GetObject<MobilityModel> ();
+    if(m_mobility != 0)
+        m_mobility->SetPosition(centerPosition);
+    else
+        NS_LOG_ERROR("Fail to get mobility model");
 
-    setupFlowRate(e2wFlowRate, w2eFlowRate, s2nFlowRate, n2sFlowRate);
+    //setup flow rates of the inflow lanes
+    SetupFlowRate(e2wFlowRate, w2eFlowRate, s2nFlowRate, n2sFlowRate);
 }
 
-
-void setupFlowRate(double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate)
+void Intersection::SetupFlowRate(double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate)
 {
+    //set arrival rate
     m_e2wFlowRate = e2wFlowRate;
     m_w2eFlowRate = w2eFlowRate;
     m_s2nFlowRate = s2nFlowRate;
     m_n2sFlowRate = n2sFlowRate;
 
+    //setup random variables which are used to generate the time intervals of the arriving vehicles
     m_intervalsOfe2wVehicle = CreateObject<ExponentialRandomVariable> ();
     m_intervalsOfe2wVehicle->SetStream(1);
     m_intervalsOfe2wVehicle->SetAttribute("Mean", DoubleValue(60/e2wFlowRate));
@@ -38,54 +49,103 @@ void setupFlowRate(double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, d
     m_intervalsOfn2sVehicle->SetAttribute("Mean", DoubleValue(60/n2sFlowRate));
 }
 
-void generateTraffic()    
+void GenerateTraffic()    
 {
-    for(int i = 1; i <= 4; i++)
-        generateTrafficForLane(i);    
+    for(DIRECTION direction = EASTWARD; direction <= NORTHWARD; direction++)
+        GenerateTrafficForLane(direction);
 }
 
-void generateTrafficForLane(int laneNumber)
+void GenerateTrafficForLane(DIRECTION direction)
 {
-    Position initialPosition(0, 0);     //initial position of the newly-generated vehicle
+    Vector initialPosition;     //initial position of the newly-generated vehicle
 
-    switch(laneNumber)
+    switch(lane)
     {
-        case 1:
+        case NORTHWARD:
             //the newly-generated vehicle lacated at the start point of south arm initially
-            initialPosition = Position(m_centerPosition.m_x, m_centerPosition.m_y - m_southArmLength);
+            initialPosition = Vector(m_centerPosition.x, m_centerPosition.y - armLength - intersectionSize / 2, 0);
             //the time interval of two successive generated vehicle is m_intervalsOfs2nVehicle->GetValue()
-            Simulator::Schedule(Seconds(m_intervalsOfs2nVehicle->GetValue()), &Intersection::generateTrafficForLane, 1);
+            Simulator::Schedule(Seconds(m_intervalsOfs2nVehicle->GetValue()), &Intersection::GenerateTrafficForLane, NORTHWARD);
             break;
 
-        case 2:
+        case WESTWARD:
             //the newly-generated vehicle lacated at the start point of east arm initially
-            initialPosition = Position(m_centerPosition.m_x + m_eastArmLength, m_centerPosition.m_y);
-            Simulator::Schedule(Seconds(m_intervalsOfe2wVehicle->GetValue()), &Intersection::generateTrafficForLane, 2);
+            initialPosition = Position(m_centerPosition.x + armLength + intersectionSize / 2, m_centerPosition.y, 0);
+            Simulator::Schedule(Seconds(m_intervalsOfe2wVehicle->GetValue()), &Intersection::GenerateTrafficForLane, WESTWARD);
             break;
 
-        case 3:
+        case SOUTHWARD:
             //the newly-generated vehicle lacated at the start point of north arm initially
-            initialPosition = Position(m_centerPosition.m_x, m_centerPosition.m_y + m_northArmLength);
-            Simulator::Schedule(Seconds(m_intervalsOfn2sVehicle->GetValue()), &Intersection::generateTrafficForLane, 3);
+            initialPosition = Position(m_centerPosition.x, m_centerPosition.y + armLength + intersectionSize / 2, 0);
+            Simulator::Schedule(Seconds(m_intervalsOfn2sVehicle->GetValue()), &Intersection::GenerateTrafficForLane, SOUTHWARD);
             break;
 
-        case 4:            
+        case EASTWARD:            
             //the newly-generated vehicle lacated at the start point of west arm initially
-            initialPosition = Position(m_centerPosition.m_x - m_westArmLength, m_centerPosition.m_y);
-            Simulator::Schedule(Seconds(m_intervalsOfw2eVehicle->GetValue()), &Intersection::generateTrafficForLane, 4);
+            initialPosition = Position(m_centerPosition.x - armLength - intersectionSize / 2, m_centerPosition.y, 0);    
+            Simulator::Schedule(Seconds(m_intervalsOfw2eVehicle->GetValue()), &Intersection::GenerateTrafficForLane, EASTWARD);
             break;
-
-        default:
-            LogError("Invalid laneNumber");
-            return;
     }
 
-    Ptr<Vehicle> vehicle = getVehicleFromPool(list<Ptr<Vehicle> > vehiclePool);
-    if(vehicle == NULL)
-        LogError("getVehicleFromPool failed");
+    if(g_vehiclePool.empty() == true)
+        NS_LOG_ERROR("g_vehiclePool is empty, unable to generate new vehicle");
     else
     {
-        vehicle->setPosition(initialPosition);
-        vehicle->startDriving();
+        Ptr<Vehicle> vehicle = g_vehiclePool.front();
+        g.pop();
+        //emit vehicles: configure the vehicle with proper laneID, initial position and driving direction
+        vehicle->Configure(GetLaneID(direction), initialPosition, direction);
+        vehicle->Drive();
+    }
+}
+
+int Intersection::GetLaneID(DIRECTION direction)
+{
+    switch(direction)
+    {
+        case EASTWARD:
+            return m_eastWardLaneID;
+        case SOUTHWARD:
+            return m_southWardLaneID;
+        case WESTWARD:
+            return m_westWardLaneID;
+        case NORTHWARD:
+            return m_northWardLaneID;
+    }
+}
+
+//return the last obstacle position of the a specific lane
+const Vector Intersection::GetObstaclePosition(int laneNumber)
+{
+    switch(laneNumber)
+    {
+        case m_eastWardLaneID:
+        {
+            if(m_eastWardLaneQueue.empty() == true)     //if there is no vehicle waiting in this lane, return the edge of intersetion region
+                return m_mobility->GetPosition() + Vector(-Intersection::size / 2, 0, 0);
+            else                                    
+                return m_eastLaneWardQueue.back()->GetPosition();   
+        }
+        case m_southWardLaneID:
+        {
+            if(m_southWardLaneQueue.empty() == true)
+                return m_mobility->GetPosition() + Vector(0, Intersection::size / 2, 0);
+            else
+                return m_southWardLaneQueue.back()->GetPosition();
+        }
+        case m_westWardLaneID:
+        {
+            if(m_westWardLaneQueue.empty() == true)
+                return m_mobility->GetPosition() + Vector(Intersection::size / 2, 0, 0);
+            else
+                return m_westWardLaneQueue.back()->GetPosition();
+        }
+        case m_northWardLaneID:
+        {
+            if(m_northWardLaneQueue.emtpy() == true)
+                return m_mobility->GetPosition() + Vector(0, -Intersection::size / 2, 0);
+            else
+                return m_northWardLaneQueue.back()->GetPosition();
+        }
     }
 }
