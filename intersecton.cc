@@ -2,7 +2,7 @@
 #include "vehicle.h"
 #include "public.h"
 
-void Intersection::Configure(int ID, const Vector& centerPosition
+void Intersection::Configure(int ID, Ipv4Address ip, const Vector& centerPosition
                     double e2wFlowRate, double w2eFlowRate, double s2nFlowRate, double n2sFlowRate)
 {
     //setup IDs of intersection and inflow lanes
@@ -11,6 +11,16 @@ void Intersection::Configure(int ID, const Vector& centerPosition
     m_southWardLaneID = m_ID * 10 + 3;
     m_westWardLaneID = m_ID * 10 + 2;
     m_northWardLaneID = m_ID * 10 + 1;
+
+    //set mapping from laneID to m_laneGroup and m_laneQueue
+    for(DIRECTION direction = EASTWARD; direction <= NORTHWARD; direction++)
+    {
+        uint32_t laneID = GetLaneID(direction);
+        m_laneQueue[laneID] = new std::queue<Ptr<Vehicle> >;
+        m_laneGroup[laneID] = new std::list<GroupInformation>;
+    }
+
+    m_ipAddress = ip;
 
     //setup center position of intersection
     m_mobility = GetNode()->GetObject<MobilityModel> ();
@@ -147,5 +157,183 @@ const Vector Intersection::GetObstaclePosition(int laneNumber)
             else
                 return m_northWardLaneQueue.back()->GetPosition();
         }
+    }
+}
+
+void Intersection::StartApplication()
+{
+    //setup send socket
+    TypeId typeID = TypeId::LookupByName ("ns3::UdpSocketFactory");
+    m_sendSocket = Socket::CreateSocket (GetNode (), typeID);
+    m_sendSocket->SetAllowBroadcast(true);      //the controller brocast the plt_list to all vehicles
+
+    //setup receive socket
+    m_receiveSocket = Socket::CreateSocket(GetNode(), typeID);
+    m_receiveSocket->Bind(InetSocketAddress(m_ipAddress, receivePort));
+
+    //setup fnn
+    m_groupingFnn = new FNN(3);
+    m_groupingFnn->Initialize(GROUPING_FIS_FILE);
+
+    Schedule();
+}
+
+void Intersection::StopApplication()
+{
+    if(m_sendSocket)
+        m_sendSocket->Close();
+    if(m_receiveSocket)
+        m_receiveSocket->Close();
+}
+
+void Intersection::SendPacket()
+{
+    NS_LOG_DEBUG("At "<<Simulator::Now().GetSeconds()<<" seconds");
+    NS_LOG_DEBUG("Plt:");
+    for(std::list<PltContent>::iterator it = plt.begin(); it != plt.end(); it++)
+        NS_LOG_DEBUG(it->vehicleID);
+
+    //brocast the plt list to all vehicles
+    Ptr<Packet> packet = new Packet();
+    PltHeader header;
+    header.SetData(plt);
+    packet->AddHeader(header);
+
+    m_sendSocket->Send(packet);    
+}
+
+void Intersection::OnReceivePacket(Ptr<Socket> socket)
+{
+    //extract packet and its content
+    Ptr<Packet> packet = socket->Recv();
+
+    SeqTsHeader header;
+    uint32_t vehicleID, vehicleLaneID;
+    VEHICLE_STATUS vehicleStatus;
+
+    packet->RemoveHeader(header);
+    status = header.GetSeq();
+    packet->RemoveHeader(header);
+    vehicleLaneID = header.GetSeq();
+    packet->RemoveHeader(header);
+    vehicleID = header.GetSeq();
+
+    switch(vehicleStatus)
+    {
+        case WAITING:       //when the vehicle is entering WAITING status, do grouping
+        {
+            NS_LOG_DEBUG(Simulator::Now().GetSeconds()<<" second intersection_" <<m_ID<<" receive WAITING packet from "<<vehicleID<<"\n");
+
+            m_laneQueue[vehicleLaneID]->push(vehicleID);
+
+            //if there is no group in lane or the vehicle is not permitted to join tailing group, form a new one
+            if(m_laneGroup[vehicleLaneID]->empty() == true || IsAbleJoinGroup(vehicleID, vehicleLaneID) == false)  
+            {
+                GroupInformation newGroup;
+                newGroup.members.push_back(vehicleID);
+                newGroup.timeStamp[vehicleID] = Simulator::Now().GetSeconds();
+
+                m_laneGroup[vehicleLaneID]->push_back(newGroup);
+            }
+            else    //the vehicle is going to join the tailing group
+            {
+                //update information of the tailing group
+                std::list<GroupInformation>::iterator itLastGroup = m_laneGroup[vehicleLaneID]->rbegin();
+                itLastGroup->members.push_back(vehicleID);
+                itLastGroup->timeStamp[vehicleID] = Simulator::Now().GetSeconds();
+            }
+
+            break;
+        }
+        case EXIT:  //when the vehicle has left intersection region, delete it from plt
+        {
+            NS_LOG_DEBUG(Simulator::Now().GetSeconds()<<" second intersection_" <<m_ID<<" receive EXIT packet from "<<vehicleID<<"\n");
+
+            for(std::list<PltContent>::iterator it = plt.begin(); it != plt.end(); it++)
+            {
+                if(vehicleID == it->vehicleID)
+                {
+                    plt.erase(it);
+                    break;
+                }
+            }
+            break;
+        }
+    }
+}
+
+bool Intersection::IsAbleJoinGroup(uint32_t vehicleID, uint32_t laneID)
+{
+    double benefit = BenefitOfJoiningGroup(vehicleID, laneID);
+
+    if(benefit >= 0.5)
+    {
+        NS_LOG_DEBUG(vehicleID<<" join group");
+        return true;
+    }
+    else
+    {
+        NS_LOG_DEBUG(vehicleID<<" setup new group");
+        return false;
+    }
+}
+
+double Intersection::BenefitOfJoiningGroup(uint32_t vehicleID, uint32_t laneID)
+{
+    GroupInformation tailGroup = m_laneGroup[laneID]->back();
+    double queueLength =  tailGroup.members.size();
+    double averageDelay = tailGroup.GetAverageDelay(Simulator::Now().GetSeconds());
+    int diffWithConcurrentLane = queueLength - GetConcurrentGroupSize();
+
+    std::vector<double> fnnInput;
+    fnnInput.push_back(queueLength);
+    fnnInput.push_back(averageDelay);
+    fnnInput.push_back(diffWithConcurrentLane);
+    double benefit = m_groupingFnn->Forward(input); 
+
+    NS_LOG_DEBUG("Benefit of joining group for vehicle "<<vehicleID<<" : "<<benefit);
+    return benefit;
+}
+
+int Intersection::GetConcurrentGroupSize(uint32_t laneID)
+{
+    std::list<GroupInformation> *groups = NULL;
+    switch(laneID)
+    {
+        case EASTWARD:
+        {
+            groups = m_laneGroup[m_westWardLaneID];
+            break;
+        }
+        case SOUTHWARD:
+        {
+            groups = m_laneGroup[m_northWardLaneID];
+            break;
+        }
+        case WESTWARD:
+        {
+            groups = m_laneGroup[m_eastWardLaneID];
+            break;
+        }
+        case NORTHWARD:
+        {
+            groups = m_laneGroup[m_southWardLaneID];
+            break;
+        }
+    }    
+    
+    if(groups->empty() == true)
+        return 0;
+    else
+        return groups->back().members.size();
+}
+
+void Intersection::Schedule()
+{
+    if(m_plt.empty() == true)
+    {
+        ConstructPlt();
+        SendPacket();
+        Simulator::Schedule(Seconds(SIMULATION_STEP), &Intersection::Schedule, this);
     }
 }

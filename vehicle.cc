@@ -1,7 +1,87 @@
-#include "simulator.h"
-
 #include "vehicle.h"
 
+bool Vehicle::Configure(uint32_t laneID, const Vector &initialPosition, DIRECTION direction)
+{
+	m_freeFlag = false;		//the vehicle is now in use 
+
+	m_currentLaneID = laneID;
+	m_direction = direction;
+	m_status = IDLE;
+	m_currentIntersectionID = Topology::GetIntersectionIDFromLane(laneID);
+
+
+	m_mobility = GetNode()->GetObject<MobilityModel> ();
+	if(m_mobility != 0)
+		m_mobility->SetPositon(initialPosition);
+	else
+	{
+		NS_LOG_ERROR("Fail to et mobility model from node");
+		return false;
+	}
+	return true;
+}
+
+void Vehicle::StartApplication()
+{
+	//create socket
+	TypeId typeID = TypeId::LookupByName("ns3::UdpSocketFactory");
+	m_sendSocket = Socket::CreateSocket(GetNode(), typeID);
+	m_receiveSocket = Socket::CreateSocket(GetNode(), typeID);
+
+	//setup receive socket
+	m_receiveSocket->Bind(InetSocketAddress(m_ipAddress, receivePort));		
+	m_receiveSocket->SetRecvCallBack(MakeCallback(&Vehicle::OnReceivePacket, this));	//setup callback function
+}
+
+void Vehicle::StopApplication()
+{
+	if(m_sendSocket)
+		m_sendSocket->Close();
+	if(m_receiveSocket)
+		m_receiveSocket->Close();
+}
+
+//send packet to intersection, telling that the vehicle is going to tranform to "status"
+void Vehicle::SendPacket(VEHICLE_STATUS status)
+{
+	//get intersection ip address
+	Ipv4Address serverIP = Topology::GetIntersection(m_currentIntersectionID)->GetIPAddress();
+	InetSocketAddress serverAddress(serverIP, receivePort);
+
+	//not like packet in real network, in ns3, the payload of packet is carried by header
+	Ptr<Packet> packet = new Packet();
+	SeqTsHeader header;
+
+	header.SetSeq(m_ID);
+	packet->AddHeader(header);
+	header.SetSeq(m_currentLaneID);
+	packet->AddHeader(header);
+	header.SetSeq(status);
+	packet->AddHeader(header);
+
+	if(m_sendSocket->SendTo(packet, 0, serverAddress) == -1)
+		NS_LOG_ERROR("Fail to send packet");
+}
+
+//callback is invoked when a packet is arrived
+//check whether the vehicle is in permission list(plt), start driving if so 
+void Vehicle::OnReceivePacket(Ptr<Socket> socket)
+{
+	Ptr<Packet> packet = socket->Recv();
+	PltHeader header;
+
+	packet->RemoveHeader(header);
+	std::list<PltContent> plt = header.GetData();
+
+	for(std::list<PltContent>::iterator it = plt.begin(); it != plt.end(); it++)
+	{
+		if(m_ID == it->vehicleID)
+			Drive();
+	}
+}
+
+//callback function is invoked when the positon and speed of the vehicle change
+//status tranformation according to the current postion of vehicle
 void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 {
 	//if the callback is invoked by a velocity update, just mark this velocity and skip the rest of this function
@@ -33,9 +113,9 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 			if(IsWithinHeadway(obstaclePosition) == true)
 			{
 				Stop();		
-				SendMsg(ENTER);
-				ResetPosition(obstaclePosition);
+				SendPacket(WAITING);
 				m_status = WAITING;
+				ResetPosition(obstaclePosition);		
 			}			
 			break;
 		}
@@ -45,7 +125,7 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 			{
 				m_nextLaneID = Topology::GetInstance()->GetDownStream(m_currentLaneID);
 				m_status = EXIT;
-				SendMsg(EXIT);
+				SendPacket(EXIT);
 			}
 			break;
 		}
@@ -62,6 +142,7 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 	}
 }
 
+//return true if the postions of vehicle and obstacle is within minimumHeadway
 bool Vehicle::IsWithinHeadway(const Vector& obstaclePosition)
 {
 	if(m_direction == EASTWARD || m_direction == WESTWARD)
@@ -94,6 +175,7 @@ void Vehicle::ResetPosition(const Vector& obstaclePosition)
 	m_mobility->SetPositon(newPosition);
 }
 
+//return true if the vehicle has the region of current intersection
 bool Vehicle::HasLeftIntersection()
 {
 	const Vector& intersectionPosition = GetIntersection();
@@ -103,6 +185,7 @@ bool Vehicle::HasLeftIntersection()
 			(fabs(intersectionPosition.y, vehiclePosition.y) < Intersection::size / 2)
 }
 
+//return true if the vehicle has the region of current lane
 bool Vehicle::HasLeftCurrentLane()
 {
 	Ptr<Intersection> intersection = Topology::GetInstance()->GetIntersection(m_currentIntersection);
@@ -110,26 +193,6 @@ bool Vehicle::HasLeftCurrentLane()
 		return fabs(GetPosition().x, intersection->GetPosition().x) > (Intersection::armLength + Intersection::size / 2);
 	else
 		return fabs(GetPosition().y, intersection->GetPosition().y) > (Intersection::armLength + Intersection::size / 2);
-}
-
-bool Vehicle::ConfigureVehicle(int laneID, const Vector &initialPosition, DIRECTION direction)
-{
-	m_freeFlag = false;		//the vehicle is now in use 
-
-	m_currentIntersectionID = Topology::GetIntersectionIDFromLane(laneID);
-	m_currentLaneID = laneID;
-	m_direction = direction;
-	m_status = IDLE;
-
-	m_mobility = GetNode()->GetObject<MobilityModel> ();
-	if(m_mobility != 0)
-		m_mobility->SetPositon(initialPosition);
-	else
-	{
-		NS_LOG_ERROR("Fail to et mobility model from node");
-		return false;
-	}
-	return true;
 }
 
 void Drive()
