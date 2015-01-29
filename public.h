@@ -14,6 +14,6 @@ const std::string GROUPING_FIS_FILE = "/home/cjl...";
 const double SIMULATION_STEP = 1;
 
 extern std::map<int, std::list<MobilityModel> > g_laneMapping;
-extern std::queue<Ptr<Vehicle> > g_vehiclePool;
+extern std::list<Ptr<Vehicle> > g_vehiclePool;
 
 #endif

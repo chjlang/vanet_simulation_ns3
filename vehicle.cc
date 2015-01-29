@@ -76,7 +76,14 @@ void Vehicle::OnReceivePacket(Ptr<Socket> socket)
 	for(std::list<PltContent>::iterator it = plt.begin(); it != plt.end(); it++)
 	{
 		if(m_ID == it->vehicleID)
-			Drive();
+		{
+			m_status = PASSING;
+			if(m_isPaused == true)
+				Simulator::Schedule(Seconds(Vehicle::startUpLostTime), &Vehicle::Drive, this);
+			else
+				Simulator::Schedule(Seconds(0), &Vehicle::Drive, this);
+			break;
+		}
 	}
 }
 
@@ -108,7 +115,7 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 		case IDLE: //stop and send ENTER messeage if the vehicle encouters an obstacle
 		{
 			Ptr<Intersection> currentIntersection = Topology::GetIntersection(m_currentIntersectionID);
-			Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID);
+			Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID, m_ID);
 
 			if(IsWithinHeadway(obstaclePosition) == true)
 			{
@@ -116,6 +123,18 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 				SendPacket(WAITING);
 				m_status = WAITING;
 				ResetPosition(obstaclePosition);		
+			}			
+			break;
+		}
+		case WAITING:	//happen when vehicle is following
+		{
+			Ptr<Intersection> currentIntersection = Topology::GetIntersection(m_currentIntersectionID);
+			Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID, m_ID);
+
+			if(IsWithinHeadway(obstaclePosition) == true)
+			{
+				Stop():
+				ResetPosition(obstaclePosition);
 			}			
 			break;
 		}
@@ -214,11 +233,33 @@ void Drive()
 			velocity += Vector(0, speed, 0);
 			break;
 	}
+	m_isPaused = false;
 	m_mobility->SetVelocity(velocity);
 }
 
 void Vehicle::Stop()
 {	
 	//setting velocity to (0, 0, 0) makes vehicle to stop driving
+	m_isPaused = true;
 	m_mobility->SetVelocity(Vector(0, 0, 0));
+
+	Simulator::Schedule(Seconds(QUERY_INTERVAL), Vehicle::TryToDrive(), this);
+}
+
+//frequently query the obstacle position, move forward to make it as close as possible to the obstacle
+void Vehicle::TryToDrive()
+{
+	if(m_isPaused == false)	//since the vehicle is driving, there is no need to "TryToDrive"
+		return;
+	else
+	{
+		Ptr<Intersection> currentIntersection = Topology::GetIntersection(m_currentIntersectionID);
+		Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID, m_ID);
+
+		//drive if the distance to obstacle is large enough, else TryToDrive in QUERY_INTERVAL
+		if(IsWithinHeadway(obstaclePosition) == false)
+			Simulator::Schedule(Seconds(Vehicle::startUpLostTime), Vehicle::Drive, this);
+		else
+			Simulator::Schedule(Seconds(QUERY_INTERVAL), Vehicle::TryToDrive, this);
+	}
 }

@@ -25,7 +25,7 @@ public:
 
 	int GetUpstream(int laneID)	{ return m_upstream[laneID]; }
 	int GetDownstream(int laneID) { return m_downstream[laneID]; }
-	int GetIntersectionFromLane(int laneID);
+	int GetIntersectionFromIDLane(int laneID);
 	Ptr<Intersection> GetIntersection(int ID);
 
 	void ConnectInteresctions(Ptr<Intersection> intersection_1, Ptr<Intersection> intersection_2, Pattern pattern);

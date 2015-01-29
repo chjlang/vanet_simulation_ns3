@@ -21,14 +21,21 @@ using namespace ns3;
 struct GroupInformation
 {	
 	std::vector<uint32_t> members;
+	double expectedArrivalTime;				//the expected arrival time at the intersection for the first vehicle in group
+											//(used for scheduling algorithm)
 	std::map<uint32_t, double> timeStamp;	//mark when did the vehicle join group
-	double GetAverageDelay(double now)
+	double GetTotalDelay(double now)
 	{
 		double totalDelay = 0;
 		for(std::map<uint32_t, double>::iterator it = timeStamp.begin(); it != timeStamp.end(); it++)
 			totalDelay += (now - it->second);
 
-		return totalDelay / members.size();
+		return totalDelay;
+	}
+
+	double GetAverageDelay(double now)
+	{
+		return GetTotalDelay(now) / members.size();
 	}
 };
 
@@ -49,14 +56,19 @@ public:
 	uint32_t GetLaneID(DIRECTION direction);
 	
 	const Vector GetPosition() { return m_mobility->GetPosition() };
-	//get position of the last obstacle in lane of which the ID is laneID
-	const Vector GetObstaclePosition(int laneID);
+	//get position of the obstacle ahead of vehicleID in laneID
+	const Vector GetObstaclePosition(int laneID, int vehicleID);
 
 	const Ipv4Address GetIPAddress() { return m_ipAddress; }
 
 	static double size = 15;		//the size of intersection region is set to: 15m * 15m
 	static double armLength = 75;	//all arms are to 75 meters long
+	static uint16_t receivePort = 8081;		//port number of receive socket
 
+	static double minGreenTime = 5;
+
+	static uint16_t receivePort = 8081;		//port number of receive socket
+	
 private:
 	void StartApplication();			//this function is called by simulaiton at the start time specific by "Start"
 	void StopApplication();				//this function is called by simulaiton at the start time specific by "Stop"
@@ -84,7 +96,7 @@ private:
 
 	Scheduler m_sheduler;
 
-	friend void Scheduler::Convert
+	friend void Scheduler::Convert2Inflow(const Intersection &intersection);
 
 
 	//id of the intersection and its inflow lanes
@@ -100,7 +112,7 @@ private:
 	Ptr<Socket> m_receiveSocket;
 
 	//lists which are used to manage vehicles in each lane
-	std::map<uint32_t, std::queue<Ptr<Vehicle> >* > m_laneQueue;
+	std::map<uint32_t, std::list<Ptr<Vehicle> >* > m_laneFlow;
 
 	/***phisical configuration of intersection***/
 	Ptr<ConstantPositionMobilityModel> m_mobility; //mobility model
@@ -115,8 +127,6 @@ private:
 	Ptr<ExponentialRandomVariable> m_intervalsOfw2eVehicle;
 	Ptr<ExponentialRandomVariable> m_intervalsOfs2nVehicle;
 	Ptr<ExponentialRandomVariable> m_intervalsOfn2sVehicle;
-
-	static uint16_t receivePort = 8081;		//port number of receive socket
 };
 
 #endif

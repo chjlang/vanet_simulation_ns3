@@ -16,7 +16,7 @@ void Intersection::Configure(int ID, Ipv4Address ip, const Vector& centerPositio
     for(DIRECTION direction = EASTWARD; direction <= NORTHWARD; direction++)
     {
         uint32_t laneID = GetLaneID(direction);
-        m_laneQueue[laneID] = new std::queue<Ptr<Vehicle> >;
+        m_laneFlow[laneID] = new std::list<Ptr<Vehicle> >;
         m_laneGroup[laneID] = new std::list<GroupInformation>;
     }
 
@@ -69,7 +69,7 @@ void GenerateTrafficForLane(DIRECTION direction)
 {
     Vector initialPosition;     //initial position of the newly-generated vehicle
 
-    switch(lane)
+    switch(direction)
     {
         case NORTHWARD:
             //the newly-generated vehicle lacated at the start point of south arm initially
@@ -125,38 +125,32 @@ int Intersection::GetLaneID(DIRECTION direction)
 }
 
 //return the last obstacle position of the a specific lane
-const Vector Intersection::GetObstaclePosition(int laneNumber)
+const Vector Intersection::GetObstaclePosition(int laneNumber, int vehicleID)
 {
-    switch(laneNumber)
+    if(m_laneFlow[laneNumber]->empty() == true)
     {
-        case m_eastWardLaneID:
+        switch(laneNumber)
         {
-            if(m_eastWardLaneQueue.empty() == true)     //if there is no vehicle waiting in this lane, return the edge of intersetion region
+            case m_eastWardLaneID:
                 return m_mobility->GetPosition() + Vector(-Intersection::size / 2, 0, 0);
-            else                                    
-                return m_eastLaneWardQueue.back()->GetPosition();   
-        }
-        case m_southWardLaneID:
-        {
-            if(m_southWardLaneQueue.empty() == true)
+            case m_southWardLaneID:
                 return m_mobility->GetPosition() + Vector(0, Intersection::size / 2, 0);
-            else
-                return m_southWardLaneQueue.back()->GetPosition();
-        }
-        case m_westWardLaneID:
-        {
-            if(m_westWardLaneQueue.empty() == true)
+            case m_westWardLaneID:
                 return m_mobility->GetPosition() + Vector(Intersection::size / 2, 0, 0);
-            else
-                return m_westWardLaneQueue.back()->GetPosition();
-        }
-        case m_northWardLaneID:
-        {
-            if(m_northWardLaneQueue.emtpy() == true)
+            case m_northWardLaneID:
                 return m_mobility->GetPosition() + Vector(0, -Intersection::size / 2, 0);
-            else
-                return m_northWardLaneQueue.back()->GetPosition();
         }
+    }
+    else
+    {
+        std::list<Ptr<Vehicle> > *laneFlow = m_laneFlow[laneNumber];
+        std::list<Ptr<Vehicle> >::iterator prev = laneFlow.begin(), cur = prev + 1;
+        while(cur != laneFlow.end() && (*cur)->GetID() == vehicleID)
+        {
+            prev = cur;
+            cur++;
+        }
+        return (*prev)->GetPosition();
     }
 }
 
@@ -199,7 +193,9 @@ void Intersection::SendPacket()
     header.SetData(plt);
     packet->AddHeader(header);
 
-    m_sendSocket->Send(packet);    
+    InetSocketAddress brocastAddress(Ipv4Address("255.255.255.255"), Vehicle::receivePort);
+
+    m_sendSocket->SendTo(packet, 0, brocastAddress);    
 }
 
 void Intersection::OnReceivePacket(Ptr<Socket> socket)
@@ -231,6 +227,7 @@ void Intersection::OnReceivePacket(Ptr<Socket> socket)
             {
                 GroupInformation newGroup;
                 newGroup.members.push_back(vehicleID);
+                newGroup.expectedArrivalTime = Simulator::Now().GetSeconds() + armLength / Vehicle::speed;
                 newGroup.timeStamp[vehicleID] = Simulator::Now().GetSeconds();
 
                 m_laneGroup[vehicleLaneID]->push_back(newGroup);

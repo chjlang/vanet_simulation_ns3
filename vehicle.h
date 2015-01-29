@@ -9,6 +9,8 @@
 
 using namespace ns3;
 
+const double QUERY_INTERVAL = 1;	//interval for the vehicle to query the position of obstacle
+
 class Vehicle : public Application
 {
 public:
@@ -26,6 +28,9 @@ public:
 	void OnCourseChanged(std::string context, Ptr<MobilityModel> mobility);
 
 	const Vector GetPosition() { return m_mobility->GetPosition(); }
+	const uint32_t GetID() { return m_ID; }
+
+	static uint16_t receivePort = 8081;		//port number of receive socket
 	
 private:
 	void StartApplication();			//this function is called by simulaiton at the start time specific by "Start"
@@ -66,6 +71,7 @@ private:
 	uint32_t m_currentLaneID;				//lane ID on which the vehicle is driving
 	VEHICLE_STATUS m_status;
 	DIRECTION m_direction;
+	bool m_isPaused;
 
 	uint32_t m_nextLaneID;				//lane ID which the vehicle is heading to 
 	Vector m_lastVelocity;				//keep track of the velocity of the last callback
@@ -76,7 +82,6 @@ private:
 	static double startUpLostTime = 3.5;	//the start up lost time
 	static double minimumHeadway = 2;		//headway (in meters) between two succesive vehicles
 
-	static uint16_t receivePort = 8081;		//port number of receive socket
 };
 
 #endif
