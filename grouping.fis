@@ -1,0 +1,68 @@
+[System]
+Name='grouping'
+Type='mamdani'
+Version=2.0
+NumInputs=3
+NumOutputs=1
+NumRules=20
+AndMethod='min'
+OrMethod='max'
+ImpMethod='min'
+AggMethod='max'
+DefuzzMethod='centroid'
+
+[Input1]
+Name='Queue_Length'
+Range=[1 20]
+NumMFs=3
+MF1='Short':'gaussmf',[2.55821118766118 1.23]
+MF2='Medium':'gaussmf',[2.584 9.746]
+MF3='Long':'gaussmf',[2.884 19.5]
+
+[Input2]
+Name='AWT'
+Range=[1 20]
+NumMFs=3
+MF1='Short':'gbellmf',[2.72100529100529 1.71 1.32]
+MF2='Medium':'gbellmf',[2.48809523809524 1.76 10.5]
+MF3='Long':'gbellmf',[3.19179894179894 1.83 20]
+
+[Input3]
+Name='Concurrent_Group'
+Range=[-15 15]
+NumMFs=3
+MF1='Smaller':'gbellmf',[4.46 1.97280205799842 -14.5]
+MF2='Almost':'gbellmf',[3.84920634920635 1.83 2.22e-16]
+MF3='Larger':'gbellmf',[7.8015873015873 3.84 18]
+
+[Output1]
+Name='Probability'
+Range=[0 1]
+NumMFs=5
+MF1='Very_Low':'trimf',[-0.4 0 0.197089947089947]
+MF2='Low':'trimf',[0 0.2 0.4]
+MF3='Normal':'trimf',[0.3 0.5 0.7]
+MF4='High':'trimf',[0.6 0.8 1]
+MF5='Very_High':'trimf',[0.8 1 1.272]
+
+[Rules]
+1 1 1, 5 (1) : 1
+1 1 2, 4 (1) : 1
+1 2 1, 4 (1) : 1
+1 2 2, 3 (1) : 1
+1 3 1, 3 (1) : 1
+1 3 2, 2 (1) : 1
+2 1 1, 5 (1) : 1
+2 1 2, 4 (1) : 1
+2 1 3, 3 (1) : 1
+2 2 1, 4 (1) : 1
+2 2 2, 3 (1) : 1
+2 2 3, 2 (1) : 1
+2 3 1, 3 (1) : 1
+2 3 2, 2 (1) : 1
+2 3 3, 1 (1) : 1
+3 1 2, 3 (1) : 1
+3 1 3, 2 (1) : 1
+3 2 2, 2 (1) : 1
+3 2 3, 1 (1) : 1
+3 3 0, 1 (1) : 1
