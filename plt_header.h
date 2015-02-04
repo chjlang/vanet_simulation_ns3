@@ -22,6 +22,7 @@ using namespace ns3;
 struct PltContent
 {
 	uint32_t vehicleID;
+  PltContent(uint32_t _vehicleID) : vehicleID(_vehicleID){}
 };
 
 class PltHeader : public Header

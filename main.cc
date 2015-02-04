@@ -22,6 +22,10 @@
 
 #include <list>
 
+#include "vehicle.h"
+#include "intersection.h"
+#include "topology.h"
+
 using namespace ns3;
 
 const double VEHICLE_START_TIME = 2;
@@ -30,6 +34,7 @@ const uint16_t MAXIMUN_NUM_VEHICLE = 500;
 const uint16_t NUMBER_INTERSECTIONS = 1;
 
 std::list<Ptr<Vehicle> > g_vehiclePool;					//record all free vehicles, used in generating traffic
+std::map<uint32_t, Ptr<Vehicle> > g_vehicleMapping;
 
 int main(int argc, char* argv[])
 {
@@ -47,50 +52,54 @@ int main(int argc, char* argv[])
 	/*****setup logging level*****/
 	if(verbose)
 	{
-		LogComponentEnable("VehcileLog", LOG_DEBUG);
+		LogComponentEnable("VehicleLog", LOG_DEBUG);
 		LogComponentEnable("IntersectionLog", LOG_DEBUG);
 		LogComponentEnable("SchedulerLog", LOG_DEBUG);
+		LogComponentEnable("TopologyLog", LOG_DEBUG);
 	}
 	else
 	{
-		LogComponentEnable("VehcileLog", LOG_ERROR);
+		LogComponentEnable("VehicleLog", LOG_ERROR);
 		LogComponentEnable("IntersectionLog", LOG_ERROR);
 		LogComponentEnable("SchedulerLog", LOG_ERROR);
+		LogComponentEnable("TopologyLog", LOG_ERROR);
 	}
 
 	/***** setup 802.11p service *****/
-	NodeCotainer vehicleNodes, intersectionNodes;
+	NodeContainer vehicleNodes, intersectionNodes;
 	vehicleNodes.Create(MAXIMUN_NUM_VEHICLE);
 	intersectionNodes.Create(NUMBER_INTERSECTIONS);
 
 	YansWifiPhyHelper wifiPhy = YansWifiPhyHelper::Default ();
 	YansWifiChannelHelper wifiChannel = YansWifiChannelHelper::Default ();
 	wifiPhy.SetChannel (wifiChannel.Create ());
-	NqosWave80211pMacHelper wifi80211pMac = NqosWaveMacHelper::Default();
-	Wifi80211pHelper 80211pHelper = Wifi80211pHelper::Default ();
-	NetDeviceCotainer vehicleDevices = 80211pHelper.Install (wifiPhy, wifi80211pMac, vehicleNodes);
-	NetDeviceCotainer intersectionDevices = 80211pHelper.Install(wifiPhy, wifi80211pMac, intersectionNodes);
+	NqosWaveMacHelper wifi80211pMac = NqosWaveMacHelper::Default();
+	Wifi80211pHelper wifi80211pHelper = Wifi80211pHelper::Default ();
+	NetDeviceContainer vehicleDevices = wifi80211pHelper.Install (wifiPhy, wifi80211pMac, vehicleNodes);
+	NetDeviceContainer intersectionDevices = wifi80211pHelper.Install(wifiPhy, wifi80211pMac, intersectionNodes);
 
 	/*****setup mobility model and topology of the road network*****/
 	MobilityHelper mobility;
 	mobility.SetMobilityModel("ns3::ConstantVelocityMobilityModel");
-	mobility.install(vehicleNodes);
+	mobility.Install(vehicleNodes);
 	mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-	mobility.install(intersectionNodes);
+	mobility.Install(intersectionNodes);
 
 	/***** setup IP address *****/
 	InternetStackHelper internet;
-	internet.Install(nodes);
+	internet.Install(vehicleNodes);
+	internet.Install(intersectionNodes);
 	Ipv4AddressHelper ipv4;
-	ipv4.SetBase("10.1.1.0", "255.255.200.0");
-	Ipv4InterfaceContainer intersectionAddress = ipv4.Assign(IntersectionDevices);
+	ipv4.SetBase("10.1.0.0", "255.255.0.0");
+	Ipv4InterfaceContainer intersectionAddress = ipv4.Assign(intersectionDevices);
 	Ipv4InterfaceContainer vehicleAddress = ipv4.Assign(vehicleDevices);
 
 	for(uint32_t i = 0; i < MAXIMUN_NUM_VEHICLE; i++)
 	{
 		Ptr<Vehicle> vehicleApp = CreateObject<Vehicle>(i, vehicleAddress.GetAddress(i));
 		g_vehiclePool.push_back(vehicleApp);
-		
+		g_vehicleMapping[i] = vehicleApp;
+
 		vehicleApp->SetStartTime(Seconds(VEHICLE_START_TIME));
 		vehicleApp->SetStopTime(Seconds(runTime));
 		vehicleNodes.Get(i)->AddApplication(vehicleApp);
@@ -99,10 +108,13 @@ int main(int argc, char* argv[])
 	for(uint32_t i = 0; i < NUMBER_INTERSECTIONS; i++)
 	{
 		Ptr<Intersection> intersectionApp = CreateObject<Intersection>();
-		intersectionApp->Configure(i, intersectionAddress.GetAddress(i), Vector(100, 100, 0), arrivalRate, arrivalRate, arrivalRate, arrivalRate);
-		intersectionApp->SetStartTime(INTERSECTION_START_TIME);
-		intersectionApp->SetStopTime(runTime);
 		intersectionNodes.Get(i)->AddApplication(intersectionApp);
+		intersectionApp->Configure(i, intersectionAddress.GetAddress(i), Vector(100, 100, 0), arrivalRate, arrivalRate, arrivalRate, arrivalRate);
+		intersectionApp->SetStartTime(Seconds(INTERSECTION_START_TIME));
+		intersectionApp->SetStopTime(Seconds(runTime));
+
+		Topology::GetInstance()->ConnectIntersections(intersectionApp, NULL, HORIZONTAL);	//temporally added for testing isolated intersection
+								 															//should be replaced by function CreateTopology() for multiple intersections
 	}
 
 	Simulator::Stop(Seconds(runTime + 1));

@@ -3,7 +3,7 @@
 
 #include <set>
 #include <map>
-#include "ns/core-module.h"
+#include "ns3/core-module.h"
 #include "intersection.h"
 
 enum Pattern { HORIZONTAL, VERTICAL };
@@ -14,21 +14,21 @@ public:
 	
 	static Topology* GetInstance()
 	{
-		if(ptr == NULL)
+		if(Topology::ptr == NULL)
 		{
-			ptr = new Topology();
-			return ptr;
+			Topology::ptr = new Topology();
+			return Topology::ptr;
 		}
 		else
-			return ptr;
+			return Topology::ptr;
 	}
 
-	int GetUpstream(int laneID)	{ return m_upstream[laneID]; }
-	int GetDownstream(int laneID) { return m_downstream[laneID]; }
-	int GetIntersectionFromIDLane(int laneID);
-	Ptr<Intersection> GetIntersection(int ID);
+	uint32_t GetUpstream(uint32_t laneID)	{ return m_upstream[laneID]; }
+	uint32_t GetDownstream(uint32_t laneID) { return m_downstream[laneID]; }
+	uint32_t GetIntersectionIDFromLane(uint32_t laneID);
+	Ptr<Intersection> GetIntersection(uint32_t ID);
 
-	void ConnectInteresctions(Ptr<Intersection> intersection_1, Ptr<Intersection> intersection_2, Pattern pattern);
+	void ConnectIntersections(Ptr<Intersection> intersection_1, Ptr<Intersection> intersection_2, Pattern pattern);
 
 private:
 	Topology() {}
@@ -36,7 +36,7 @@ private:
 	static Topology *ptr;
 
 	std::set<Ptr<Intersection> > m_intersections;
-	std::map<int, int> m_upstream, m_downstream;
+	std::map<uint32_t, uint32_t> m_upstream, m_downstream;
 };
 
 #endif

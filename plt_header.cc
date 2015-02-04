@@ -38,7 +38,7 @@ void PltHeader::Print (std::ostream &os) const
   // This method is invoked by the packet printing
   // routines to print the content of my header.
   //os << "data=" << m_data << std::endl;
-  for(std::list<PltContent>::iteator it = plt.begin(); it != plt.end(); it++)
+  for(std::list<PltContent>::const_iterator it = plt.begin(); it != plt.end(); it++)
     os<<it->vehicleID<<" ";
   os<<std::endl;
 }
@@ -54,7 +54,7 @@ void PltHeader::Serialize (Buffer::Iterator start) const
   // we can serialize four bytes at the start of the buffer.
   // we write them in network byte order.
 	start.WriteHtonU32(plt.size());
-	for(std::list<PltContent>::iteator it = plt.begin(); it != plt.end(); it++)
+	for(std::list<PltContent>::const_iterator it = plt.begin(); it != plt.end(); it++)
 	{
 		start.WriteHtonU32(it->vehicleID);
 	}
@@ -70,8 +70,7 @@ uint32_t PltHeader::Deserialize (Buffer::Iterator start)
 	uint32_t size = start.ReadNtohU32();
 	for(uint32_t i = 0; i < size; i++)
 	{
-		PltContent content;
-		content.vehicleID = start.ReadNtohU32();
+		PltContent content(start.ReadNtohU32());
 		plt.push_back(content);
 	}
 

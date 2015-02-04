@@ -2,10 +2,10 @@
 #define _VEHICLE_H_
 
 #include "ns3/core-module.h"
-#include "ns3/application-module.h"
+#include "ns3/applications-module.h"
 #include "ns3/mobility-module.h"
 
-#incldue "public.h"
+#include "public.h"
 
 using namespace ns3;
 
@@ -21,8 +21,8 @@ public:
 	void Drive();	
 	void Stop();
 
-	//setup the initial position and velocity of vehicle, return true if configure successfully
-	bool Configure(uint16_t ID, uint16_t laneID, const Vector &initialPosition, VEHICLE_DIRECTION direction);
+	//setup the initial position and velocity of vehicle
+	void Configure(uint32_t laneID, const Vector &initialPosition, DIRECTION direction);
 
 	//callback function when the positon and speed of the vehicle change
 	void OnCourseChanged(std::string context, Ptr<MobilityModel> mobility);
@@ -30,7 +30,13 @@ public:
 	const Vector GetPosition() { return m_mobility->GetPosition(); }
 	const uint32_t GetID() { return m_ID; }
 
-	static uint16_t receivePort = 8081;		//port number of receive socket
+	const static uint16_t receivePort = 8081;		//port number of receive socket
+
+	//common paramenters of all vehicles
+	const static uint16_t lengthOfVehicle = 5;	//all vehicles are set to be 5 meters long 
+	const static double speed = 10;				//all vehicles' speed are set to be 10 m/s
+	const static double startUpLostTime = 3.5;	//the start up lost time
+	const static double minimumHeadway = 2;		//headway (in meters) between two succesive vehicles
 	
 private:
 	void StartApplication();			//this function is called by simulaiton at the start time specific by "Start"
@@ -54,6 +60,8 @@ private:
 	//return true if the vehicle has the region of current lane
 	bool HasLeftCurrentLane();
 
+	void TryToDrive();
+
 
 	/***private variable declaration***/
 
@@ -66,8 +74,8 @@ private:
 	Ptr<Socket> m_receiveSocket;
 
 	//driving status
-	Ptr<ConstantVelocityMobilityModel> m_mobility;
-	uint32_t m_currentIntersectionID		//intersection ID at which the vehicle arrive
+	Ptr<ConstantVelocityMobilityModel> m_mobility;			//constant velocity mobility model
+	uint32_t m_currentIntersectionID;		//intersection ID at which the vehicle arrive
 	uint32_t m_currentLaneID;				//lane ID on which the vehicle is driving
 	VEHICLE_STATUS m_status;
 	DIRECTION m_direction;
@@ -75,12 +83,6 @@ private:
 
 	uint32_t m_nextLaneID;				//lane ID which the vehicle is heading to 
 	Vector m_lastVelocity;				//keep track of the velocity of the last callback
-
-	//common paramenters of all vehicles
-	static uint16_t lengthOfVehicle = 5;	//all vehicles are set to be 5 meters long 
-	static double speed = 10;				//all vehicles' speed are set to be 10 m/s
-	static double startUpLostTime = 3.5;	//the start up lost time
-	static double minimumHeadway = 2;		//headway (in meters) between two succesive vehicles
 
 };
 

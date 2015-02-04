@@ -173,6 +173,7 @@ const Vector Intersection::GetObstaclePosition(uint32_t laneNumber, uint32_t veh
 
 void Intersection::StartApplication()
 {
+    NS_LOG_DEBUG("Intersection_" << m_ID <<" start to run");
     //setup send socket
     TypeId typeID = TypeId::LookupByName ("ns3::UdpSocketFactory");
     m_sendSocket = Socket::CreateSocket (GetNode(), typeID);
@@ -355,6 +356,7 @@ uint32_t Intersection::GetConcurrentGroupSize(uint32_t laneID)
 
 void Intersection::Schedule()
 {
+    NS_LOG_DEBUG("Intersection_" << m_ID <<" Schedule()");
     if(m_plt.empty() == true)
     {
         ConstructPlt();
@@ -365,6 +367,8 @@ void Intersection::Schedule()
 
 void Intersection::ConstructPlt()
 {
+    NS_LOG_DEBUG("Intersection_" << m_ID << " ConstructPlt()");
+
     Job job = m_trafficScheduler->GetNextScheduleJob(*this);
 
     m_plt.clear();

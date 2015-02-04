@@ -1,28 +1,31 @@
 #include "vehicle.h"
+#include "topology.h"
 
-bool Vehicle::Configure(uint32_t laneID, const Vector &initialPosition, DIRECTION direction)
+#include <cmath>
+
+NS_LOG_COMPONENT_DEFINE("VehicleLog");
+
+void Vehicle::Configure(uint32_t laneID, const Vector &initialPosition, DIRECTION direction)
 {
 	m_freeFlag = false;		//the vehicle is now in use 
 
 	m_currentLaneID = laneID;
 	m_direction = direction;
 	m_status = IDLE;
-	m_currentIntersectionID = Topology::GetIntersectionIDFromLane(laneID);
+	m_currentIntersectionID = Topology::GetInstance()->GetIntersectionIDFromLane(laneID);
 
-
-	m_mobility = GetNode()->GetObject<MobilityModel> ();
+	m_mobility = GetNode()->GetObject<ConstantVelocityMobilityModel>();
 	if(m_mobility != 0)
-		m_mobility->SetPositon(initialPosition);
+		m_mobility->SetPosition(initialPosition);
 	else
 	{
 		NS_LOG_ERROR("Fail to et mobility model from node");
-		return false;
 	}
-	return true;
 }
 
 void Vehicle::StartApplication()
 {
+	NS_LOG_DEBUG("vehicle_" << m_ID <<" start to run");
 	//create socket
 	TypeId typeID = TypeId::LookupByName("ns3::UdpSocketFactory");
 	m_sendSocket = Socket::CreateSocket(GetNode(), typeID);
@@ -30,7 +33,9 @@ void Vehicle::StartApplication()
 
 	//setup receive socket
 	m_receiveSocket->Bind(InetSocketAddress(m_ipAddress, receivePort));		
-	m_receiveSocket->SetRecvCallBack(MakeCallback(&Vehicle::OnReceivePacket, this));	//setup callback function
+	m_receiveSocket->SetRecvCallback(MakeCallback(&Vehicle::OnReceivePacket, this));	//setup callback function
+
+	Stop();
 }
 
 void Vehicle::StopApplication()
@@ -45,7 +50,7 @@ void Vehicle::StopApplication()
 void Vehicle::SendPacket(VEHICLE_STATUS status)
 {
 	//get intersection ip address
-	Ipv4Address serverIP = Topology::GetIntersection(m_currentIntersectionID)->GetIPAddress();
+	Ipv4Address serverIP = Topology::GetInstance()->GetIntersection(m_currentIntersectionID)->GetIPAddress();
 	InetSocketAddress serverAddress(serverIP, receivePort);
 
 	//not like packet in real network, in ns3, the payload of packet is carried by header
@@ -99,13 +104,13 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 		return;
 	}
 
-	NS_LOG_DEBUG(context + " x: " + mobility->GetPosition().x + " y: " + mobility->GetPosition().y);
+	NS_LOG_DEBUG(context << " x: " << mobility->GetPosition().x << " y: " << mobility->GetPosition().y);
 
 	//check if the vehicle is still available
-	if(m_currentLaneID == -1)
+	if(m_currentLaneID == 0)
 	{
 		m_freeFlag = true;
-		g_vehiclePool.push(this); 
+		g_vehiclePool.push_back(this); 
 		return;
 	}
 
@@ -114,7 +119,7 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 	{
 		case IDLE: //stop and send ENTER messeage if the vehicle encouters an obstacle
 		{
-			Ptr<Intersection> currentIntersection = Topology::GetIntersection(m_currentIntersectionID);
+			Ptr<Intersection> currentIntersection = Topology::GetInstance()->GetIntersection(m_currentIntersectionID);
 			Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID, m_ID);
 
 			if(IsWithinHeadway(obstaclePosition) == true)
@@ -128,12 +133,12 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 		}
 		case WAITING:	//happen when vehicle is following
 		{
-			Ptr<Intersection> currentIntersection = Topology::GetIntersection(m_currentIntersectionID);
+			Ptr<Intersection> currentIntersection = Topology::GetInstance()->GetIntersection(m_currentIntersectionID);
 			Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID, m_ID);
 
 			if(IsWithinHeadway(obstaclePosition) == true)
 			{
-				Stop():
+				Stop();
 				ResetPosition(obstaclePosition);
 			}			
 			break;
@@ -142,7 +147,7 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 		{
 			if(HasLeftIntersection() == true)
 			{
-				m_nextLaneID = Topology::GetInstance()->GetDownStream(m_currentLaneID);
+				m_nextLaneID = Topology::GetInstance()->GetDownstream(m_currentLaneID);
 				m_status = EXIT;
 				SendPacket(EXIT);
 			}
@@ -165,9 +170,9 @@ void Vehicle::OnCourseChanged(std::string context, Ptr<MobilityModel> mobility)
 bool Vehicle::IsWithinHeadway(const Vector& obstaclePosition)
 {
 	if(m_direction == EASTWARD || m_direction == WESTWARD)
-		return (fabs(m_mobility->GetPosition().x, obstaclePosition.x) < Vehicle::minimumHeadway);
+		return (fabs(m_mobility->GetPosition().x - obstaclePosition.x) < Vehicle::minimumHeadway);
 	else
-		return (fabs(m_mobility->GetPosition().y, obstaclePosition.y) < Vehicle::minimumHeadway);
+		return (fabs(m_mobility->GetPosition().y - obstaclePosition.y) < Vehicle::minimumHeadway);
 }
 
 //reset vehicle position according to the obstacle position, maintaining the minimum headway between two succesive vehicles
@@ -191,50 +196,48 @@ void Vehicle::ResetPosition(const Vector& obstaclePosition)
 			newPosition.y = obstaclePosition.y - Vehicle::minimumHeadway;
 			break;
 	}
-	m_mobility->SetPositon(newPosition);
+	m_mobility->SetPosition(newPosition);
 }
 
 //return true if the vehicle has the region of current intersection
 bool Vehicle::HasLeftIntersection()
 {
-	const Vector& intersectionPosition = GetIntersection();
+	const Vector& intersectionPosition = Topology::GetInstance()->GetIntersection(m_currentIntersectionID)->GetPosition();
 	const Vector& vehiclePosition = m_mobility->GetPosition();
 
-	return (fabs(intersectionPosition.x, vehiclePosition.x) < Intersection::size / 2) &&
-			(fabs(intersectionPosition.y, vehiclePosition.y) < Intersection::size / 2)
+	return (fabs(intersectionPosition.x - vehiclePosition.x) < Intersection::size / 2) &&
+			(fabs(intersectionPosition.y - vehiclePosition.y) < Intersection::size / 2);
 }
 
 //return true if the vehicle has the region of current lane
 bool Vehicle::HasLeftCurrentLane()
 {
-	Ptr<Intersection> intersection = Topology::GetInstance()->GetIntersection(m_currentIntersection);
+	Ptr<Intersection> intersection = Topology::GetInstance()->GetIntersection(m_currentIntersectionID);
 	if(m_direction == EASTWARD || m_direction == WESTWARD)
-		return fabs(GetPosition().x, intersection->GetPosition().x) > (Intersection::armLength + Intersection::size / 2);
+		return fabs(GetPosition().x - intersection->GetPosition().x) > (Intersection::armLength + Intersection::size / 2);
 	else
-		return fabs(GetPosition().y, intersection->GetPosition().y) > (Intersection::armLength + Intersection::size / 2);
+		return fabs(GetPosition().y - intersection->GetPosition().y) > (Intersection::armLength + Intersection::size / 2);
 }
 
-void Drive()
+void Vehicle::Drive()
 {
-	Vector velocity;
 	//set velocity according to driving direction
 	switch (m_direction)
 	{
 		case EASTWARD:
-			velocity += Vector(speed, 0, 0);
+			m_mobility->SetVelocity(Vector(speed, 0, 0));
 			break;
 		case SOUTHWARD:
-			velocity += Vector(0, -speed, 0);
+			m_mobility->SetVelocity(Vector(0, -speed, 0));
 			break;
 		case WESTWARD:
-			velocity += Vector(-speed, 0, 0);
+			m_mobility->SetVelocity(Vector(-speed, 0, 0));
 			break;
 		case NORTHWARD:
-			velocity += Vector(0, speed, 0);
+			m_mobility->SetVelocity(Vector(0, speed, 0));
 			break;
 	}
 	m_isPaused = false;
-	m_mobility->SetVelocity(velocity);
 }
 
 void Vehicle::Stop()
@@ -243,7 +246,7 @@ void Vehicle::Stop()
 	m_isPaused = true;
 	m_mobility->SetVelocity(Vector(0, 0, 0));
 
-	Simulator::Schedule(Seconds(QUERY_INTERVAL), Vehicle::TryToDrive(), this);
+	Simulator::Schedule(Seconds(QUERY_INTERVAL), &Vehicle::TryToDrive, this);
 }
 
 //frequently query the obstacle position, move forward to make it as close as possible to the obstacle
@@ -253,13 +256,13 @@ void Vehicle::TryToDrive()
 		return;
 	else
 	{
-		Ptr<Intersection> currentIntersection = Topology::GetIntersection(m_currentIntersectionID);
+		Ptr<Intersection> currentIntersection = Topology::GetInstance()->GetIntersection(m_currentIntersectionID);
 		Vector obstaclePosition = currentIntersection->GetObstaclePosition(m_currentLaneID, m_ID);
 
 		//drive if the distance to obstacle is large enough, else TryToDrive in QUERY_INTERVAL
 		if(IsWithinHeadway(obstaclePosition) == false)
-			Simulator::Schedule(Seconds(Vehicle::startUpLostTime), Vehicle::Drive, this);
+			Simulator::Schedule(Seconds(Vehicle::startUpLostTime), &Vehicle::Drive, this);
 		else
-			Simulator::Schedule(Seconds(QUERY_INTERVAL), Vehicle::TryToDrive, this);
+			Simulator::Schedule(Seconds(QUERY_INTERVAL), &Vehicle::TryToDrive, this);
 	}
 }
