@@ -27,7 +27,7 @@ class Intersection;
 class Intersection : public Application
 {
 public:
-	Intersection() {}
+	Intersection() { m_cumulativeDelay = m_numberVehiclePassed = 0; }
 	~Intersection() {}
 	
 	//setup intersection: ID, position, flow rates
@@ -110,6 +110,10 @@ private:
 	Ptr<ExponentialRandomVariable> m_intervalsOfw2eVehicle;
 	Ptr<ExponentialRandomVariable> m_intervalsOfs2nVehicle;
 	Ptr<ExponentialRandomVariable> m_intervalsOfn2sVehicle;
+
+	/***variables used for recording vehicle's delay***/
+	double m_cumulativeDelay;
+	uint32_t m_numberVehiclePassed;
 };
 
 #endif

@@ -66,7 +66,7 @@ void Vehicle::SendPacket(VEHICLE_STATUS status)
 	packet->AddHeader(header);
 
 	if(m_sendSocket->SendTo(packet, 0, serverAddress) == -1)
-		NS_LOG_ERROR("Fail to send packet");
+		NS_LOG_ERROR("vehicle_" << m_ID << " Fail to send packet");
 	else
 		NS_LOG_DEBUG("At " << Simulator::Now().GetSeconds() << " seconds vehicle_" << m_ID << " send packet with status: " << status);
 }
@@ -130,20 +130,26 @@ void Vehicle::ResetPosition(const Vector& obstaclePosition)
 {
 	NS_LOG_DEBUG("Reset position");
 
+	Vector intersectionPosition = Topology::GetInstance()->GetIntersection(m_currentIntersectionID)->GetPosition();
 	Vector newPosition(obstaclePosition);
+
 	switch(m_direction)
 	{
 		case EASTWARD:
-			newPosition.x = obstaclePosition.x - Vehicle::minimumHeadway;
+			if(obstaclePosition.x != intersectionPosition.x - Intersection::size / 2)	// if the vehicle is not at the head of lane, reset position
+				newPosition.x = obstaclePosition.x - Vehicle::minimumHeadway;
 			break;
 		case SOUTHWARD:
-			newPosition.y = obstaclePosition.y + Vehicle::minimumHeadway;
+			if(obstaclePosition.y != intersectionPosition.y + Intersection::size / 2)
+				newPosition.y = obstaclePosition.y + Vehicle::minimumHeadway;
 			break;
 		case WESTWARD:
-			newPosition.x = obstaclePosition.x + Vehicle::minimumHeadway;
+			if(obstaclePosition.x != intersectionPosition.x + Intersection::size / 2)
+				newPosition.x = obstaclePosition.x + Vehicle::minimumHeadway;
 			break;
 		case NORTHWARD:
-			newPosition.y = obstaclePosition.y - Vehicle::minimumHeadway;
+			if(obstaclePosition.y != intersectionPosition.y - Intersection::size / 2)
+				newPosition.y = obstaclePosition.y - Vehicle::minimumHeadway;
 			break;
 	}
 

@@ -30,7 +30,7 @@ using namespace ns3;
 
 const double VEHICLE_START_TIME = 1;
 const double INTERSECTION_START_TIME = 2;
-const uint16_t MAXIMUN_NUM_VEHICLE = 10;
+const uint16_t MAXIMUN_NUM_VEHICLE = 100;
 const uint16_t NUMBER_INTERSECTIONS = 1;
 
 std::list<Ptr<Vehicle> > g_vehiclePool;					//record all free vehicles, used in generating traffic

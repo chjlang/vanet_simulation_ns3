@@ -214,6 +214,10 @@ void Intersection::StopApplication()
         m_sendSocket->Close();
     if(m_receiveSocket)
         m_receiveSocket->Close();
+
+    //print average delay
+    NS_LOG_UNCOND("Number of vehicles passed: " << m_numberVehiclePassed);
+    NS_LOG_UNCOND("Average delay: " << m_cumulativeDelay / m_numberVehiclePassed);
 }
 
 void Intersection::SendPacket()
@@ -233,7 +237,8 @@ void Intersection::SendPacket()
 
         InetSocketAddress brocastAddress(Ipv4Address("255.255.255.255"), Vehicle::receivePort);
 
-        m_sendSocket->SendTo(packet, 0, brocastAddress);
+        if( m_sendSocket->SendTo(packet, 0, brocastAddress) == -1)
+            NS_LOG_ERROR("intersection_" << m_ID << " failed to send packet");
     }
     else
         NS_LOG_DEBUG("m_plt is empty, no packet is sent");    
@@ -267,7 +272,7 @@ void Intersection::OnReceivePacket(Ptr<Socket> socket)
             //if there is no group in lane or the vehicle is not permitted to join tailing group, form a new one
             if(m_laneGroup[vehicleLaneID]->empty() == true || IsAbleJoinGroup(vehicleID, vehicleLaneID) == false)  
             {
-                NS_LOG_DEBUG("Setting up a new grroup for vehicle_" << vehicleID << " on lane_" << vehicleLaneID);
+                NS_LOG_DEBUG("Setting up a new group for vehicle_" << vehicleID << " on lane_" << vehicleLaneID);
 
                 GroupInformation newGroup;
                 newGroup.members.push_back(vehicleID);
@@ -331,11 +336,8 @@ double Intersection::BenefitOfJoiningGroup(uint32_t vehicleID, uint32_t laneID)
     NS_LOG_DEBUG("Intersection::BenefitOfJoiningGroup()");
 
     GroupInformation tailGroup = m_laneGroup[laneID]->back();
-    NS_LOG_DEBUG("test");
     double queueLength =  tailGroup.members.size();
-    NS_LOG_DEBUG("test1");
     double averageDelay = tailGroup.GetAverageDelay(Simulator::Now().GetSeconds());
-    NS_LOG_DEBUG("test2");
     int diffWithConcurrentLane = queueLength - GetConcurrentGroupSize(laneID);
 
     NS_LOG_DEBUG("queueLength: " << queueLength << " averageDelay: " << averageDelay << " diff: " << diffWithConcurrentLane);
@@ -395,6 +397,9 @@ void Intersection::ConstructPlt()
     GroupInformation *group = job.group1;
     if(group != NULL)
     {
+        m_cumulativeDelay += group->GetTotalDelay(Simulator::Now().GetSeconds());
+        m_numberVehiclePassed += group->members.size();
+
         for(uint32_t i = 0; i < group->members.size(); i++)
         {
             PltContent content(group->members[i]);
@@ -407,6 +412,9 @@ void Intersection::ConstructPlt()
     group = job.group2;
     if(group != NULL)
     {
+        m_cumulativeDelay += group->GetTotalDelay(Simulator::Now().GetSeconds());
+        m_numberVehiclePassed += group->members.size();
+
         for(uint32_t i = 0; i < group->members.size(); i++)
         {
             PltContent content(group->members[i]);
