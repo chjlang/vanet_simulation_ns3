@@ -69,6 +69,8 @@ private:
 	void Schedule();
 	void ConstructPlt();
 
+	/***debug funciton***/
+	void PrintLane();
 	/***attributes of scheduling***/
 	std::list<PltContent> m_plt;				//permission list
 	std::map<uint32_t, std::list<GroupInformation>* >  m_laneGroup;		//keep track of groups in each lane

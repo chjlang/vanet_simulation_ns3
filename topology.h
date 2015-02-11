@@ -1,7 +1,6 @@
 #ifndef _TOPOLOGY_H_
 #define _TOPOLOGY_H_
 
-#include <set>
 #include <map>
 #include "ns3/core-module.h"
 #include "intersection.h"
@@ -35,7 +34,7 @@ private:
 
 	static Topology *ptr;
 
-	std::set<Ptr<Intersection> > m_intersections;
+	std::map<uint32_t, Ptr<Intersection> > m_intersections;
 	std::map<uint32_t, uint32_t> m_upstream, m_downstream;
 };
 

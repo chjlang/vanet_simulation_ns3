@@ -12,46 +12,46 @@ AggMethod='max'
 DefuzzMethod='centroid'
 
 [Input1]
-Name='Queue_Length'
+Name='GS'
 Range=[1 20]
 NumMFs=3
-MF1='Short':'gaussmf',[2.55821118766118 1.23]
-MF2='Medium':'gaussmf',[2.584 9.746]
-MF3='Long':'gaussmf',[2.884 19.5]
+MF1='Short':'trimf',[-4.7871746031746 1.0648253968254 8.7938253968254]
+MF2='Medium':'trimf',[3.68 9.97222222222222 14.6]
+MF3='Long':'trimf',[11.3 20.0251322751323 24.7]
 
 [Input2]
 Name='AWT'
-Range=[1 20]
+Range=[1 80]
 NumMFs=3
-MF1='Short':'gbellmf',[2.72100529100529 1.71 1.32]
-MF2='Medium':'gbellmf',[2.48809523809524 1.76 10.5]
-MF3='Long':'gbellmf',[3.19179894179894 1.83 20]
+MF1='Short':'trimf',[-19.4830158730159 1.08218412698413 33.7969841269841]
+MF2='Medium':'trimf',[8.74 32.8716931216931 55.5]
+MF3='Long':'trimf',[44.1574074074074 78.4 110]
 
 [Input3]
-Name='Concurrent_Group'
-Range=[-15 15]
+Name='DIFF'
+Range=[-8 8]
 NumMFs=3
-MF1='Smaller':'gbellmf',[4.46 1.97280205799842 -14.5]
-MF2='Almost':'gbellmf',[3.84920634920635 1.83 2.22e-16]
-MF3='Larger':'gbellmf',[7.8015873015873 3.84 18]
+MF1='Smaller':'trimf',[-11.2 -7.85 0.0634920634920633]
+MF2='Almost':'trimf',[-3.984 0.0472 4.079]
+MF3='Larger':'trimf',[1.12 7.3015873015873 28.9]
 
 [Output1]
-Name='Probability'
+Name='Benefit'
 Range=[0 1]
 NumMFs=5
-MF1='Very_Low':'trimf',[-0.4 0 0.197089947089947]
-MF2='Low':'trimf',[0 0.2 0.4]
-MF3='Normal':'trimf',[0.3 0.5 0.7]
-MF4='High':'trimf',[0.6 0.8 1]
-MF5='Very_High':'trimf',[0.8 1 1.272]
+MF1='Very_Low':'trimf',[-0.3949 -0.005126 0.2311]
+MF2='Low':'trimf',[-0.0158 0.2008 0.416]
+MF3='Normal':'trimf',[0.2818 0.5002 0.7182]
+MF4='High':'trimf',[0.5888 0.7892 1.008]
+MF5='Very_High':'trimf',[0.8116 0.9913 1.289]
 
 [Rules]
 1 1 1, 5 (1) : 1
-1 1 2, 4 (1) : 1
-1 2 1, 4 (1) : 1
-1 2 2, 3 (1) : 1
-1 3 1, 3 (1) : 1
-1 3 2, 2 (1) : 1
+1 1 2, 5 (1) : 1
+1 2 1, 5 (1) : 1
+1 2 2, 5 (1) : 1
+1 3 1, 5 (1) : 1
+1 3 2, 5 (1) : 1
 2 1 1, 5 (1) : 1
 2 1 2, 4 (1) : 1
 2 1 3, 3 (1) : 1
@@ -60,8 +60,8 @@ MF5='Very_High':'trimf',[0.8 1 1.272]
 2 2 3, 2 (1) : 1
 2 3 1, 3 (1) : 1
 2 3 2, 2 (1) : 1
-2 3 3, 1 (1) : 1
-3 1 2, 3 (1) : 1
+2 3 3, 2 (1) : 1
+3 1 2, 2 (1) : 1
 3 1 3, 2 (1) : 1
 3 2 2, 2 (1) : 1
 3 2 3, 1 (1) : 1

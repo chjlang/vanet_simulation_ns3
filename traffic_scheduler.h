@@ -22,10 +22,10 @@ struct SchedulerStatus
 {
 	struct XS
 	{
-		int x1, x2;		//each element xi counts the number of groups that had been serviced in phase i
-		int theLastPhase;
+		uint32_t x1, x2;		//each element xi counts the number of groups that had been serviced in phase i
+		uint32_t theLastPhase;
 
-		XS(int _x1 = 0, int _x2= 0, int _theLastPhase = 0) 
+		XS(uint32_t _x1 = 0, uint32_t _x2= 0, uint32_t _theLastPhase = 0) 
 		{ 
 			x1 = _x1;
 			x2 = _x2;
@@ -59,7 +59,7 @@ struct SchedulerStatus
 
 	double finishTime;		
 	double cumulativeDelay;
-	int prevPhaseIndex;
+	uint32_t prevPhaseIndex;
 
 	SchedulerStatus()
 	{
@@ -89,10 +89,10 @@ private:
 	void Schedule(Intersection& intersection);
 
 	//calculate and return the next scheduler status given the old status and next phase index
-	SchedulerStatus CalculateStatus(const SchedulerStatus& oldStatus, int phaseIndex);	
+	SchedulerStatus CalculateStatus(const SchedulerStatus& oldStatus, uint32_t phaseIndex);	
 
 	//a naive way to collect all possible state groups
-	std::vector<SchedulerStatus::XS> GetCombination(int sum);
+	std::vector<SchedulerStatus::XS> GetCombination(uint32_t sum);
 
 	//update state using forward recursion technique (refer to algorithm3)
 	void ForwardRecusion(SchedulerStatus::XS statusIndex);

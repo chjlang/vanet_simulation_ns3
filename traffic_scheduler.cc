@@ -8,9 +8,21 @@ NS_LOG_COMPONENT_DEFINE("SchedulerLog");
 
 double Job::TimeToCrossIntersection()
 {
-	int jobSize = group1->members.size() > group2->members.size() ? group1->members.size() : group2->members.size();
-	double distance = Intersection::size + (jobSize - 1) * Vehicle::minimumHeadway;
-	return distance / Vehicle::speed;
+	uint32_t jobSize;
+	if(group1 != NULL && group2 != NULL)
+		jobSize = group1->members.size() > group2->members.size() ? group1->members.size() : group2->members.size();
+	else if(group1 != NULL)
+		jobSize = group1->members.size();
+	else
+		jobSize = group2->members.size();
+
+	if(jobSize > 0)
+	{
+		double distance = Intersection::size + (jobSize - 1) * Vehicle::minimumHeadway;
+		return distance / Vehicle::speed;
+	}
+	else
+		return 0;
 }
 
 Job::Job(GroupInformation *_group1, GroupInformation *_group2, double _expectArrivalTime)
@@ -22,7 +34,10 @@ Job::Job(GroupInformation *_group1, GroupInformation *_group2, double _expectArr
 
 void TrafficScheduler::ConvertIntoInflow(Intersection &intersection)
 {
+	inflow1.clear();
 	MergeToInflow(inflow1, intersection.m_laneGroup[intersection.m_eastWardLaneID], intersection.m_laneGroup[intersection.m_westWardLaneID]);
+
+	inflow2.clear();
 	MergeToInflow(inflow2, intersection.m_laneGroup[intersection.m_southWardLaneID], intersection.m_laneGroup[intersection.m_northWardLaneID]);
 }
 
@@ -48,40 +63,28 @@ void TrafficScheduler::MergeToInflow(std::vector<Job> &inflow, std::list<GroupIn
 	}	
 }
 
-//calculate the next scheduler status given the old status and next phase index
-SchedulerStatus TrafficScheduler::CalculateStatus(const SchedulerStatus& oldStatus, int phaseIndex)	
-{
-	SchedulerStatus newStatus;
-	Job job;
-	if(phaseIndex == 1)
-		job = inflow1[oldStatus.xs.x1];
-	else
-		job = inflow2[oldStatus.xs.x2];
-
-	if(phaseIndex == oldStatus.xs.theLastPhase)
-		newStatus.finishTime = oldStatus.finishTime + job.TimeToCrossIntersection();
-	else
-		newStatus.finishTime = oldStatus.finishTime + job.TimeToCrossIntersection() + Vehicle::startUpLostTime;
-
-	newStatus.cumulativeDelay = oldStatus.cumulativeDelay + job.group1->GetTotalDelay(newStatus.finishTime) + job.group2->GetTotalDelay(newStatus.finishTime);
-	
-	return newStatus;
-}
-
 void TrafficScheduler::Schedule(Intersection& intersection)
 {
+	NS_LOG_DEBUG("TrafficScheduler::Schedule()");
+
 	ConvertIntoInflow(intersection);
 
 	m_status.clear();
 	SchedulerStatus initialStatus;
+	initialStatus.finishTime = Simulator::Now().GetSeconds();
+	initialStatus.xs.theLastPhase = 1;
+	m_status.insert(make_pair(initialStatus.xs, initialStatus));
+	initialStatus.xs.theLastPhase = 2;
 	m_status.insert(make_pair(initialStatus.xs, initialStatus));
 
-	int numOfJobs = inflow1.size() + inflow2.size();
+	uint32_t numOfJobs = inflow1.size() + inflow2.size();
+	NS_LOG_DEBUG("TrafficScheduler::Schedule() of intersection_" << intersection.GetID() << " number of jobs: " << numOfJobs);
 
-	for(int i = 1; i <= numOfJobs; i++)
+	for(uint32_t i = 1; i <= numOfJobs; i++)
 	{
 		std::vector<SchedulerStatus::XS> setOfx = GetCombination(i);
-		for(int j = 0; j < setOfx.size(); j++)
+
+		for(uint32_t j = 0; j < setOfx.size(); j++)
 		{
 			if(setOfx[j].x1 > 0)
 			{
@@ -95,15 +98,16 @@ void TrafficScheduler::Schedule(Intersection& intersection)
 			}
 		}
 	}
+
 	RetrieveSolution();
 }
 
-std::vector<SchedulerStatus::XS> TrafficScheduler::GetCombination(int sum)
+std::vector<SchedulerStatus::XS> TrafficScheduler::GetCombination(uint32_t sum)
 {
 	std::vector<SchedulerStatus::XS> result;
-	for(int i = 0; i <= sum; i++)
+	for(uint32_t i = 0; i <= inflow1.size(); i++)
 	{
-		for(int j = 0; j <=sum; j++)
+		for(uint32_t j = 0; j <= inflow2.size(); j++)
 		{
 			if(i + j == sum)
 				result.push_back(SchedulerStatus::XS(i, j));
@@ -114,10 +118,12 @@ std::vector<SchedulerStatus::XS> TrafficScheduler::GetCombination(int sum)
 
 void TrafficScheduler::ForwardRecusion(SchedulerStatus::XS statusIndex)
 {
+	NS_LOG_DEBUG("TrafficScheduler::ForwardRecusion() statusIndex: " << statusIndex.x1 << " " << statusIndex.x2 << " " << statusIndex.theLastPhase);
+
 	double minDelay = 10000000;
 
 	SchedulerStatus::XS prevXS(statusIndex);
-	if(statusIndex.theLastPhase = 1)
+	if(statusIndex.theLastPhase == 1)
 		prevXS.x1--;
 	else
 		prevXS.x2--;
@@ -125,11 +131,12 @@ void TrafficScheduler::ForwardRecusion(SchedulerStatus::XS statusIndex)
 	prevXS.theLastPhase = 1;
 	if(m_status.find(prevXS) != m_status.end())
 	{
-		SchedulerStatus newStatus = CalculateStatus(m_status[prevXS], 1);
+		SchedulerStatus newStatus = CalculateStatus(m_status[prevXS], statusIndex.theLastPhase);
 		if(newStatus.cumulativeDelay < minDelay)
 		{
 			minDelay = newStatus.cumulativeDelay;
 			newStatus.prevPhaseIndex = 1;
+			newStatus.xs = statusIndex;
 			m_status[statusIndex] = newStatus;
 		}
 	}
@@ -137,14 +144,42 @@ void TrafficScheduler::ForwardRecusion(SchedulerStatus::XS statusIndex)
 	prevXS.theLastPhase = 2;
 	if(m_status.find(prevXS) != m_status.end())
 	{
-		SchedulerStatus newStatus = CalculateStatus(m_status[prevXS], 2);
+		SchedulerStatus newStatus = CalculateStatus(m_status[prevXS], statusIndex.theLastPhase);
 		if(newStatus.cumulativeDelay < minDelay)
 		{
 			minDelay = newStatus.cumulativeDelay;
 			newStatus.prevPhaseIndex = 2;
+			newStatus.xs = statusIndex;
 			m_status[statusIndex] = newStatus;
 		}
 	}
+	NS_LOG_DEBUG("minDelay: " << minDelay);
+}
+
+//calculate the next scheduler status given the old status and next phase index
+SchedulerStatus TrafficScheduler::CalculateStatus(const SchedulerStatus& oldStatus, uint32_t phaseIndex)	
+{
+	NS_LOG_DEBUG("TrafficScheduler::CalculateStatus() oldStatus: " << oldStatus.xs.x1 << " " << oldStatus.xs.x2 << " " << oldStatus.xs.theLastPhase << " phaseIndex: " << phaseIndex);
+
+	SchedulerStatus newStatus;
+	Job job;
+	if(phaseIndex == 1)
+		job = inflow1[oldStatus.xs.x1];
+	else if(phaseIndex == 2)
+		job = inflow2[oldStatus.xs.x2];
+
+	if(phaseIndex == oldStatus.xs.theLastPhase)
+		newStatus.finishTime = oldStatus.finishTime + job.TimeToCrossIntersection();
+	else
+		newStatus.finishTime = oldStatus.finishTime + job.TimeToCrossIntersection() + Vehicle::startUpLostTime;
+
+	newStatus.cumulativeDelay = oldStatus.cumulativeDelay;
+	if(job.group1 != NULL)
+		newStatus.cumulativeDelay += job.group1->GetTotalDelay(newStatus.finishTime);
+	if(job.group2 != NULL)
+		newStatus.cumulativeDelay += job.group2->GetTotalDelay(newStatus.finishTime);
+	
+	return newStatus;
 }
 
 void TrafficScheduler::RetrieveSolution()
@@ -152,13 +187,21 @@ void TrafficScheduler::RetrieveSolution()
 	scheduleFlow.clear();
 	SchedulerStatus::XS fullX1(inflow1.size(), inflow2.size(), 1), fullX2(inflow1.size(), inflow2.size(), 2);
 
+	double minDelay = 1000000;
 	SchedulerStatus::XS trace;
-	if(m_status[fullX1].cumulativeDelay < m_status[fullX2].cumulativeDelay)
+	if(m_status.find(fullX1) != m_status.end() && m_status[fullX1].cumulativeDelay < minDelay)
+	{
+		minDelay = m_status[fullX1].cumulativeDelay;
 		trace = fullX1;
-	else
+	}
+	if(m_status.find(fullX2) != m_status.end() && m_status[fullX2].cumulativeDelay < minDelay)
+	{
+		minDelay = m_status[fullX2].cumulativeDelay;
 		trace = fullX2;
+	}
+	NS_LOG_DEBUG("TrafficScheduler::RetrieveSolution() minimum delay: " << minDelay);
 
-	for(int i = inflow1.size() + inflow2.size(); i >= 1; i--)
+	for(uint32_t i = inflow1.size() + inflow2.size(); i >= 1; i--)
 	{
 		if(trace.theLastPhase == 1)
 		{
@@ -171,7 +214,7 @@ void TrafficScheduler::RetrieveSolution()
 			inflow2.pop_back();
 		}
 
-		int prevIndex = m_status[trace].prevPhaseIndex;
+		uint32_t prevIndex = m_status[trace].prevPhaseIndex;
 		if(trace.theLastPhase == 1)
 			trace.x1--;
 		else
@@ -182,11 +225,19 @@ void TrafficScheduler::RetrieveSolution()
 
 Job TrafficScheduler::GetNextScheduleJob(Intersection& intersection)
 {
+	NS_LOG_DEBUG("TrafficScheduler::GetNextScheduleJob()");
+
 	if(scheduleFlow.empty() == true)
 		Schedule(intersection);
 
-	Job nextJob = scheduleFlow.front();
-	scheduleFlow.pop_front();
-
-	return nextJob;
+	if(scheduleFlow.empty() == false)
+	{
+		Job nextJob = scheduleFlow.front();
+		scheduleFlow.pop_front();
+		return nextJob;
+	}
+	else	//if Schedule() did not get a schedule flow (because there is no vehicle in inflow)
+	{		//return Job(NULL, NULL, 0), the calling funciton should check the return
+		return Job(NULL, NULL, 0);
+	}		
 }

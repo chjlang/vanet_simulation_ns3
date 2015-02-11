@@ -28,9 +28,9 @@
 
 using namespace ns3;
 
-const double VEHICLE_START_TIME = 2;
-const double INTERSECTION_START_TIME = 1;
-const uint16_t MAXIMUN_NUM_VEHICLE = 500;
+const double VEHICLE_START_TIME = 1;
+const double INTERSECTION_START_TIME = 2;
+const uint16_t MAXIMUN_NUM_VEHICLE = 10;
 const uint16_t NUMBER_INTERSECTIONS = 1;
 
 std::list<Ptr<Vehicle> > g_vehiclePool;					//record all free vehicles, used in generating traffic
@@ -52,17 +52,17 @@ int main(int argc, char* argv[])
 	/*****setup logging level*****/
 	if(verbose)
 	{
-		LogComponentEnable("VehicleLog", LOG_DEBUG);
-		LogComponentEnable("IntersectionLog", LOG_DEBUG);
-		LogComponentEnable("SchedulerLog", LOG_DEBUG);
-		LogComponentEnable("TopologyLog", LOG_DEBUG);
+		LogComponentEnable("VehicleLog", LOG_LEVEL_DEBUG);
+		LogComponentEnable("IntersectionLog", LOG_LEVEL_DEBUG);
+		LogComponentEnable("SchedulerLog", LOG_LEVEL_DEBUG);
+		LogComponentEnable("TopologyLog", LOG_LEVEL_DEBUG);
 	}
 	else
 	{
-		LogComponentEnable("VehicleLog", LOG_ERROR);
-		LogComponentEnable("IntersectionLog", LOG_ERROR);
-		LogComponentEnable("SchedulerLog", LOG_ERROR);
-		LogComponentEnable("TopologyLog", LOG_ERROR);
+		LogComponentEnable("VehicleLog", LOG_LEVEL_ERROR);
+		LogComponentEnable("IntersectionLog", LOG_LEVEL_ERROR);
+		LogComponentEnable("SchedulerLog", LOG_LEVEL_ERROR);
+		LogComponentEnable("TopologyLog", LOG_LEVEL_ERROR);
 	}
 
 	/***** setup 802.11p service *****/
@@ -100,9 +100,9 @@ int main(int argc, char* argv[])
 		g_vehiclePool.push_back(vehicleApp);
 		g_vehicleMapping[i] = vehicleApp;
 
+		vehicleNodes.Get(i)->AddApplication(vehicleApp);
 		vehicleApp->SetStartTime(Seconds(VEHICLE_START_TIME));
 		vehicleApp->SetStopTime(Seconds(runTime));
-		vehicleNodes.Get(i)->AddApplication(vehicleApp);
 	}
 
 	for(uint32_t i = 0; i < NUMBER_INTERSECTIONS; i++)
